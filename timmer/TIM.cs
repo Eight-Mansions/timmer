@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -49,6 +50,63 @@ namespace timmer
         public TIM(BinaryReader aTIM)
         {
             ReadTIM(aTIM);
+        }
+
+        public TIM(string extractFrom, uint bpp, ushort w, ushort h, string ppos, string cpos)
+        {
+            uint psize = 0;
+            switch (bpp)
+            {
+                case 4:
+                    bpp = 0;
+                    psize = (uint)((w * h) / 2);
+                    break;
+                case 8:
+                    bpp = 1;
+                    psize = (uint)(w * h);
+                    break;
+                case 16:
+                    bpp = 2;
+                    psize = (uint)((w * h) * 2);
+                    break;
+                case 32:
+                    bpp = 3;
+                    psize = (uint)((w * h) * 3);
+                    break;
+            }
+
+            int pixelPos = ppos.StartsWith("0x") ? Int32.Parse(ppos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(ppos);
+            int clutPos = cpos.StartsWith("0x") ? Int32.Parse(cpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(cpos);
+
+            BinaryReader infile = new BinaryReader(File.OpenRead(extractFrom));
+
+            infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
+            ushort[] cdata = new ushort[bpp == 4 ? 16 : 256];
+            for (int i = 0; i < cdata.Length; i++)
+            {
+                cdata[i] = infile.ReadUInt16();
+            }
+
+            infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
+            byte[] pdata = infile.ReadBytes((int)psize);
+
+            this.mode = bpp;
+            this.ccount = 1;
+            this.prect = new RECT()
+            {
+                w = w,
+                h = h
+            };
+
+            this.cdata = cdata;
+            this.pdata = pdata;
+
+            acolors = new List<int[]>();
+            for (int i = 0; i < cdata.Length; i++)
+            {
+                acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
+            }
+
         }
 
         public TIM(uint mode, uint ccount, ushort w, ushort h, ushort[] cdata, byte[] pdata)

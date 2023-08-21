@@ -58,61 +58,8 @@ namespace timmer
             }
 
             void Extract(ExtractOptions opts)
-            {
-                uint bpp = 0;
-                switch (opts.BPP)
-                {
-                    case 4:
-                        bpp = 0;
-                        break;
-                    case 8:
-                        bpp = 1;
-                        break;
-                    case 16:
-                        bpp = 2;
-                        break;
-                    case 32:
-                        bpp = 3;
-                        break;
-                }
-
-                int pixelPos = opts.PixelPos.StartsWith("0x") ? Int32.Parse(opts.PixelPos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PixelPos);
-                int clutPos = opts.PalettePos.StartsWith("0x") ? Int32.Parse(opts.PalettePos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PalettePos);
-
-                BinaryReader infile = new BinaryReader(File.OpenRead(opts.Infilename));
-
-
-                infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
-                ushort[] cdata = new ushort[bpp == 4 ? 16 : 256];
-                for (int i = 0; i < cdata.Length; i++)
-                {
-                    cdata[i] = infile.ReadUInt16();
-                }
-
-                infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
-                ushort w =  opts.Width;
-                ushort h = opts.Height;
-                uint psize = 0;
-                if (bpp == 0) // 4 bit
-                {
-                    psize = (uint)((w * h) / 2);
-                }
-                else if (bpp == 1) // 8 bit
-                {
-                    psize = (uint)(w * h);
-                }
-                else if (bpp == 2) // 16 bit
-                {
-                    psize = (uint)((w * h) * 2);
-                }
-                else if (bpp == 3) // 24 bit
-                {
-                    psize = (uint)((w * h) * 3);
-                }
-
-                byte[] pdata = infile.ReadBytes((int)psize);
-
-                TIM tim = new TIM(bpp, 1, w, h, cdata, pdata);
+            {             
+                TIM tim = new TIM(opts.Infilename, opts.BPP, opts.Width, opts.Height, opts.PixelPos, opts.PalettePos);
                 tim.ExportPNG(opts.Outfilename);
             }
         }
