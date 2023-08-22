@@ -81,7 +81,7 @@ namespace timmer
             BinaryReader infile = new BinaryReader(File.OpenRead(extractFrom));
 
             infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
-            ushort[] cdata = new ushort[bpp == 4 ? 16 : 256];
+            ushort[] cdata = new ushort[bpp == 0 ? 16 : 256];
             for (int i = 0; i < cdata.Length; i++)
             {
                 cdata[i] = infile.ReadUInt16();
@@ -89,6 +89,8 @@ namespace timmer
 
             infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
             byte[] pdata = infile.ReadBytes((int)psize);
+
+            infile.Close();
 
             this.mode = bpp;
             this.ccount = 1;
@@ -374,6 +376,20 @@ namespace timmer
             return images.ToArray();
         }
 
+        public void Import4Bpp(Bitmap image)
+        {
+            int pidx = 0;
+            for (int y = 0; y < prect.h; y++)
+            {
+                for (int x = 0; x < prect.w; x += 2)
+                {
+                    byte pixel = (byte)(GetClosestColor(ColorToArray(image.GetPixel(x, y))) & 0x0F);
+                    pixel |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(x + 1, y))) & 0x0F) << 4);
+                    pdata[pidx++] = pixel;
+                }
+            }
+        }
+
         public Bitmap[] Export8Bpp()
         {
             List<Bitmap> images = new List<Bitmap>();
@@ -486,7 +502,7 @@ namespace timmer
         {
             if ((mode & 7) == 0)        // 4 bpp
             {
-                throw new Exception("4bpp not implemented!");
+                Import4Bpp(new Bitmap(filename));
             }
             else if ((mode & 7) == 1)   // 8 bpp
             {

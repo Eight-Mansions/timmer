@@ -1,6 +1,7 @@
 ﻿using CommandLine;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -42,6 +43,25 @@ namespace timmer
 
         }
 
+        [Verb("insert", HelpText = "Insert graphic.")]
+        internal class InsertOptions
+        {
+            [Option('i', "infile", Required = false, HelpText = "Filename to insert graphic into.")]
+            public string Infilename { get; set; }
+
+            [Option('o', "outfile", Required = false, HelpText = "Filename of graphic to insert.")]
+            public string Outfilename { get; set; }
+
+            [Option('p', "pixeldata", Required = false, HelpText = "Position of pixel data of original graphic.")]
+            public string PixelPos { get; set; }
+
+            [Option('c', "clutdata", Required = false, HelpText = "Position of clut/palette data of original graphic.")]
+            public string PalettePos { get; set; }
+
+            [Option('b', "bpp", Required = false, HelpText = "Bits per pixel.")]
+            public uint BPP { get; set; }
+        }
+
         static void Main(string[] args)
         {
             var types = LoadVerbs();
@@ -55,12 +75,30 @@ namespace timmer
                 case ExtractOptions e:
                     Extract(e);
                     break;
+                case InsertOptions e:
+                    Insert(e);
+                    break;
             }
 
             void Extract(ExtractOptions opts)
             {             
                 TIM tim = new TIM(opts.Infilename, opts.BPP, opts.Width, opts.Height, opts.PixelPos, opts.PalettePos);
                 tim.ExportPNG(opts.Outfilename);
+            }
+
+            void Insert(InsertOptions opts)
+            {
+                Bitmap g = new Bitmap(opts.Outfilename);
+                TIM tim = new TIM(opts.Infilename, opts.BPP, (ushort)g.Width, (ushort)g.Height, opts.PixelPos, opts.PalettePos);               
+                tim.ImportImage(opts.Outfilename);
+
+                int pixelPos = opts.PixelPos.StartsWith("0x") ? Int32.Parse(opts.PixelPos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PixelPos);
+
+                BinaryWriter infile = new BinaryWriter(File.OpenWrite(opts.Infilename));
+                infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
+                infile.Write(tim.GetPixelData());
+                infile.Close();
+
             }
         }
 
