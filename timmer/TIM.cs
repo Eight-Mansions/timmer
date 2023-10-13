@@ -75,18 +75,29 @@ namespace timmer
                     break;
             }
 
-            int pixelPos = ppos.StartsWith("0x") ? Int32.Parse(ppos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(ppos);
-            int clutPos = cpos.StartsWith("0x") ? Int32.Parse(cpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(cpos);
 
             BinaryReader infile = new BinaryReader(File.OpenRead(extractFrom));
-
-            infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
+            
             ushort[] cdata = new ushort[bpp == 0 ? 16 : 256];
-            for (int i = 0; i < cdata.Length; i++)
+            acolors = new List<int[]>();
+            if (bpp == 0 || bpp == 1)
             {
-                cdata[i] = infile.ReadUInt16();
-            }
+                int clutPos = cpos.StartsWith("0x") ? Int32.Parse(cpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(cpos);               
 
+                infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
+
+                for (int i = 0; i < cdata.Length; i++)
+                {
+                    cdata[i] = infile.ReadUInt16();
+                }
+
+                for (int i = 0; i < cdata.Length; i++)
+                {
+                    acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
+                }
+            }
+            
+            int pixelPos = ppos.StartsWith("0x") ? Int32.Parse(ppos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(ppos);
             infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
             byte[] pdata = infile.ReadBytes((int)psize);
 
@@ -103,11 +114,6 @@ namespace timmer
             this.cdata = cdata;
             this.pdata = pdata;
 
-            acolors = new List<int[]>();
-            for (int i = 0; i < cdata.Length; i++)
-            {
-                acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
-            }
 
         }
 
