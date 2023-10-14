@@ -40,6 +40,9 @@ namespace timmer
             [Option('h', "height", Required = false, HelpText = "Height of image.")]
             public ushort Height { get; set; }
 
+            [Option('t', "timdata", Required = false, HelpText = "Position of tim data.")]
+            public string TimPos { get; set; }
+
 
         }
 
@@ -60,6 +63,9 @@ namespace timmer
 
             [Option('b', "bpp", Required = false, HelpText = "Bits per pixel.")]
             public uint BPP { get; set; }
+
+            [Option('t', "timdata", Required = false, HelpText = "Position of tim data.")]
+            public string TimPos { get; set; }
         }
 
         static void Main(string[] args)
@@ -81,23 +87,47 @@ namespace timmer
             }
 
             void Extract(ExtractOptions opts)
-            {             
-                TIM tim = new TIM(opts.Infilename, opts.BPP, opts.Width, opts.Height, opts.PixelPos, opts.PalettePos);
-                tim.ExportPNG(opts.Outfilename);
+            {
+                if (!String.IsNullOrWhiteSpace(opts.TimPos))
+                {
+
+                    TIM tim = new TIM(opts.Infilename, opts.TimPos);
+                    tim.ExportPNG(opts.Outfilename);
+                }
+                else
+                {
+                    TIM tim = new TIM(opts.Infilename, opts.BPP, opts.Width, opts.Height, opts.PixelPos, opts.PalettePos);
+                    tim.ExportPNG(opts.Outfilename);
+                }
             }
 
             void Insert(InsertOptions opts)
             {
                 Bitmap g = new Bitmap(opts.Outfilename);
-                TIM tim = new TIM(opts.Infilename, opts.BPP, (ushort)g.Width, (ushort)g.Height, opts.PixelPos, opts.PalettePos);               
-                tim.ImportImage(opts.Outfilename);
+                if (!String.IsNullOrEmpty(opts.TimPos))
+                {
+                    TIM tim = new TIM(opts.Infilename, opts.TimPos);
+                    tim.ImportImage(opts.Outfilename);
 
-                int pixelPos = opts.PixelPos.StartsWith("0x") ? Int32.Parse(opts.PixelPos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PixelPos);
+                    BinaryWriter updatefile = new BinaryWriter(File.OpenWrite(opts.Infilename));
+                    updatefile.BaseStream.Seek(tim.GetPixelPos(), SeekOrigin.Begin);
+                    updatefile.Write(tim.GetPixelData());
+                    updatefile.Close();
+                }
+                else
+                {
+                    TIM tim = new TIM(opts.Infilename, opts.BPP, (ushort)g.Width, (ushort)g.Height, opts.PixelPos, opts.PalettePos);
+                    tim.ImportImage(opts.Outfilename);
 
-                BinaryWriter infile = new BinaryWriter(File.OpenWrite(opts.Infilename));
-                infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
-                infile.Write(tim.GetPixelData());
-                infile.Close();
+                    int pixelPos = opts.PixelPos.StartsWith("0x") ? Int32.Parse(opts.PixelPos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PixelPos);
+
+                    BinaryWriter infile = new BinaryWriter(File.OpenWrite(opts.Infilename));
+                    infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
+                    infile.Write(tim.GetPixelData());
+                    infile.Close();
+                }
+                
+                
 
             }
         }

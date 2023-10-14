@@ -30,11 +30,12 @@ namespace timmer
         RECT crect;     /* CLUT rectangle on frame buffer */
         uint ccount;    /* number of cluts */
         ushort[] cdata; /* clut data */
-        List<int[]> acolors;
+        List<int[]> acolors = new List<int[]>();
         List<CLOSEST> ccolors = new List<CLOSEST>();
         uint psize;     /* length of entire pixel block including psize */
         RECT prect;     /* texture image rectangle on frame buffer */
         byte[] pdata;   /* pixel data */
+        uint ppos;
 
 
 
@@ -50,6 +51,18 @@ namespace timmer
         public TIM(BinaryReader aTIM)
         {
             ReadTIM(aTIM);
+        }
+
+        public TIM(string extractFrom, string tpos)
+        {
+            BinaryReader aFile = new BinaryReader(File.OpenRead(extractFrom));
+
+            int timPos = tpos.StartsWith("0x") ? Int32.Parse(tpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(tpos);
+            aFile.BaseStream.Seek(timPos, SeekOrigin.Begin);
+
+            ReadTIM(aFile);
+
+            aFile.Close();
         }
 
         public TIM(string extractFrom, uint bpp, ushort w, ushort h, string ppos, string cpos)
@@ -77,26 +90,29 @@ namespace timmer
 
 
             BinaryReader infile = new BinaryReader(File.OpenRead(extractFrom));
-            
-            ushort[] cdata = new ushort[bpp == 0 ? 16 : 256];
-            acolors = new List<int[]>();
-            if (bpp == 0 || bpp == 1)
+
+            if (!String.IsNullOrEmpty(cpos))
             {
-                int clutPos = cpos.StartsWith("0x") ? Int32.Parse(cpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(cpos);               
-
-                infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
-
-                for (int i = 0; i < cdata.Length; i++)
+                ushort[] cdata = new ushort[bpp == 0 ? 16 : 256];
+                if (bpp == 0 || bpp == 1)
                 {
-                    cdata[i] = infile.ReadUInt16();
-                }
+                    int clutPos = cpos.StartsWith("0x") ? Int32.Parse(cpos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(cpos);
 
-                for (int i = 0; i < cdata.Length; i++)
-                {
-                    acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
+                    infile.BaseStream.Seek(clutPos, SeekOrigin.Begin);
+
+                    for (int i = 0; i < cdata.Length; i++)
+                    {
+                        cdata[i] = infile.ReadUInt16();
+                    }
+
+                    for (int i = 0; i < cdata.Length; i++)
+                    {
+                        this.acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
+                    }
                 }
+                this.cdata = cdata;
             }
-            
+
             int pixelPos = ppos.StartsWith("0x") ? Int32.Parse(ppos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(ppos);
             infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
             byte[] pdata = infile.ReadBytes((int)psize);
@@ -110,8 +126,7 @@ namespace timmer
                 w = w,
                 h = h
             };
-
-            this.cdata = cdata;
+            
             this.pdata = pdata;
 
 
@@ -225,9 +240,14 @@ namespace timmer
                 truepsize = (uint)((prect.w * prect.h) * 3);
             }
 
+            ppos = (uint)aTim.BaseStream.Position;
             pdata = aTim.ReadBytes((int)truepsize);
         }
 
+        public uint GetPixelPos()
+        {
+            return ppos;
+        }
         public byte[] GetPixelData()
         {
             return pdata;
@@ -448,6 +468,20 @@ namespace timmer
             return new Bitmap[] { image };
         }
 
+        public void Import16Bpp(Bitmap image)
+        {
+            int pidx = 0;
+            for (int y = 0; y < prect.h; y++)
+            {
+                for (int x = 0; x < prect.w; x++)
+                {
+                    ushort pixel = ColorToRGBA(image.GetPixel(x, y));
+                    pdata[pidx++] = (byte)(pixel & 0xFF);
+                    pdata[pidx++] = (byte)(pixel >> 8);
+                }
+            }
+        }
+
         public Bitmap[] Export24Bpp()
         {
             Bitmap image = new Bitmap(prect.w, prect.h);
@@ -516,7 +550,7 @@ namespace timmer
             }
             else if ((mode & 7) == 2)   // 16 bpp
             {
-                throw new Exception("16bpp not implemented!");
+                Import16Bpp(new Bitmap(filename));
             }
             else if ((mode & 7) == 3)   // 24 bpp
             {
