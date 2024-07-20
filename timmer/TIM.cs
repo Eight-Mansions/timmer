@@ -36,6 +36,7 @@ namespace timmer
         RECT prect;     /* texture image rectangle on frame buffer */
         byte[] pdata;   /* pixel data */
         uint ppos;
+        bool useSTP;
 
 
 
@@ -330,9 +331,12 @@ namespace timmer
             int stp = ((c & 0x8000) >> 15);
 
             int a = 255;
-            if (stp == 0 && (c & 0x7FFF) == 0)
+            if (useSTP)
             {
-                a = 0;
+                if (stp == 0 && (c & 0x7FFF) == 0)
+                {
+                    a = 0;
+                }
             }
             return a;
         }
@@ -560,6 +564,11 @@ namespace timmer
             {
                 throw new Exception("Mixed not implmented!");
             }
+        }
+
+        public void UseSTP(bool useSTP)
+        {
+            this.useSTP = useSTP;
         }
     }
 }
