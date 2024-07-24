@@ -4,10 +4,6 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using static System.Net.Mime.MediaTypeNames;
 
 namespace timmer
 {
@@ -36,6 +32,7 @@ namespace timmer
         RECT prect;     /* texture image rectangle on frame buffer */
         byte[] pdata;   /* pixel data */
         uint ppos;
+        uint mask;
         bool useSTP;
 
 
@@ -49,9 +46,9 @@ namespace timmer
             aTIM.Close();
         }
 
-        public TIM(BinaryReader aTIM)
+        public TIM(BinaryReader aTIM, bool useSTP)
         {
-            ReadTIM(aTIM);
+            ReadTIM(aTIM, useSTP);
         }
 
         public TIM(string extractFrom, string tpos)
@@ -153,8 +150,10 @@ namespace timmer
             }
         }
 
-        void ReadTIM(BinaryReader aTim)
+        void ReadTIM(BinaryReader aTim, bool useSTP = true)
         {
+            this.useSTP = useSTP;
+
             uint magicId = aTim.ReadUInt32();
             if (magicId != 0x0010)
             {
@@ -265,6 +264,11 @@ namespace timmer
             }
 
             return -1;
+        }
+
+        public void SetMask(uint mask)
+        {
+            this.mask = mask;
         }
 
         // Thanks Hilltop for helping me with code!
@@ -408,14 +412,18 @@ namespace timmer
 
         public void Import4Bpp(Bitmap image)
         {
-            int pidx = 0;
-            for (int y = 0; y < prect.h; y++)
+            int num = 0;
+            uint num2 = mask;
+            for (int i = 0; i < prect.h; i++)
             {
-                for (int x = 0; x < prect.w; x += 2)
+                for (int j = 0; j < prect.w; j += 2)
                 {
-                    byte pixel = (byte)(GetClosestColor(ColorToArray(image.GetPixel(x, y))) & 0x0F);
-                    pixel |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(x + 1, y))) & 0x0F) << 4);
-                    pdata[pidx++] = pixel;
+                    _ = 238;
+                    byte b = pdata[num];
+                    b = (byte)((b & (num2 << 4)) | (b & num2));
+                    b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i))) & 0xFu);
+                    b |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(j + 1, i))) & 0xF) << 4);
+                    pdata[num++] = b;
                 }
             }
         }

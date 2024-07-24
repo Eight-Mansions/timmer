@@ -1,14 +1,10 @@
 ﻿using CommandLine;
 using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Reflection;
-using System.Text;
-using System.Threading.Tasks;
-using System.Xml.Linq;
+using System.Text.RegularExpressions;
 
 namespace timmer
 {
@@ -55,6 +51,9 @@ namespace timmer
             [Option('o', "outfile", Required = false, HelpText = "Filename of graphic to insert.")]
             public string Outfilename { get; set; }
 
+            [Option('f', "filter", Required = false, HelpText = "Filter to find files to insert graphics into.")]
+            public string Filter { get; set; }
+
             [Option('p', "pixeldata", Required = false, HelpText = "Position of pixel data of original graphic.")]
             public string PixelPos { get; set; }
 
@@ -66,6 +65,16 @@ namespace timmer
 
             [Option('t', "timdata", Required = false, HelpText = "Position of tim data.")]
             public string TimPos { get; set; }
+
+            [Option('m', "mask", Required = false, HelpText = "Mask to use when inserting pixels.")]
+            public uint Mask { get; set; }
+        }
+
+        class TIMEntry
+        {
+            public int index;
+            public uint position;
+            public TIM aTim;
         }
 
         static void Main(string[] args)
@@ -88,47 +97,153 @@ namespace timmer
 
             void Extract(ExtractOptions opts)
             {
-                if (!String.IsNullOrWhiteSpace(opts.TimPos))
+                string infilename = opts.Infilename;
+                if (!string.IsNullOrEmpty(infilename))
                 {
+                    List<string> list = new List<string>();
+                    if (Directory.Exists(infilename))
+                    {
+                        list.AddRange(Directory.GetFiles(infilename, "*", SearchOption.AllDirectories));
+                    }
+                    else
+                    {
+                        list.Add(infilename);
+                    }
 
-                    TIM tim = new TIM(opts.Infilename, opts.TimPos);
-                    tim.ExportPNG(opts.Outfilename);
-                }
-                else
-                {
-                    TIM tim = new TIM(opts.Infilename, opts.BPP, opts.Width, opts.Height, opts.PixelPos, opts.PalettePos);
-                    tim.ExportPNG(opts.Outfilename);
+                    foreach (string item in list)
+                    {
+                        Console.WriteLine("Scanning " + item + "...");
+
+                        List<uint> timPositions = new List<uint>();
+                        BinaryReader br = new BinaryReader(File.OpenRead(item));
+                        while (br.BaseStream.Position + 8 < br.BaseStream.Length)
+                        {
+                            uint magicId = br.ReadUInt32();
+                            uint mode = br.ReadUInt32();
+                            if (magicId == 0x0010 && (mode & 7) < 4)
+                            {
+                                timPositions.Add((uint)(br.BaseStream.Position - 8));
+                            }
+                            br.BaseStream.Seek(-7, SeekOrigin.Current);
+                        }
+
+                        for (int i = 0; i < timPositions.Count; i++)
+                        {
+                            uint timPos = timPositions[i];
+                            br.BaseStream.Seek(timPos, SeekOrigin.Begin);
+                            try
+                            {
+                                TIM tim = new TIM(br, false);
+                                string filename = item + "." + i + ".png";
+                                tim.ExportPNG(filename);
+                            }
+                            catch
+                            {
+                            }
+                        }
+                    }
                 }
             }
 
             void Insert(InsertOptions opts)
             {
-                Bitmap g = new Bitmap(opts.Outfilename);
-                if (!String.IsNullOrEmpty(opts.TimPos))
+                string infilename = opts.Infilename;
+                string outfilename = opts.Outfilename;
+                if (!string.IsNullOrEmpty(infilename))
                 {
-                    TIM tim = new TIM(opts.Infilename, opts.TimPos);
-                    tim.ImportImage(opts.Outfilename);
+                    List<string> infilenames = new List<string>();
+                    if (Directory.Exists(infilename))
+                    {
+                        string searchPattern = "*";
+                        if (!string.IsNullOrEmpty(opts.Filter))
+                        {
+                            searchPattern = opts.Filter;
+                        }
+                        infilenames.AddRange(Directory.GetFiles(infilename, searchPattern, SearchOption.AllDirectories));
+                    }
+                    else
+                    {
+                        infilenames.Add(infilename);
+                    }
+                    List<string> outfilenames = new List<string>();
+                    if (Directory.Exists(outfilename))
+                    {
+                        outfilenames.AddRange(Directory.GetFiles(outfilename, "*.png", SearchOption.AllDirectories));
+                    }
+                    else
+                    {
+                        outfilenames.Add(infilename);
+                    }
+                    List<string> graphicsToInsert = new List<string>();
+                    for (int j = 0; j < outfilenames.Count; j++)
+                    {
+                        string text = outfilenames[j];
+                        FileInfo fileInfo = new FileInfo(text.Replace(new Regex(".([^.]+).png").Match(text).Value, ""));
+                        if (!graphicsToInsert.Contains(fileInfo.Name))
+                        {
+                            graphicsToInsert.Add(fileInfo.Name);
+                        }
+                    }
+                    foreach (string file in infilenames)
+                    {
+                        Console.WriteLine("Updating " + file + "...");
 
-                    BinaryWriter updatefile = new BinaryWriter(File.OpenWrite(opts.Infilename));
-                    updatefile.BaseStream.Seek(tim.GetPixelPos(), SeekOrigin.Begin);
-                    updatefile.Write(tim.GetPixelData());
-                    updatefile.Close();
+                        FileInfo fi = new FileInfo(file);
+                        if (graphicsToInsert.Contains(fi.Name))
+                        {
+                            List<uint> timPositions = new List<uint>();
+                            BinaryReader br = new BinaryReader(File.OpenRead(file));
+                            while (br.BaseStream.Position + 8 < br.BaseStream.Length)
+                            {
+                                uint magicId = br.ReadUInt32();
+                                uint mode = br.ReadUInt32();
+                                if (magicId == 0x0010 && (mode & 7) < 4)
+                                {
+                                    timPositions.Add((uint)(br.BaseStream.Position - 8));
+                                }
+                                br.BaseStream.Seek(-7, SeekOrigin.Current);
+                            }
+
+                            List<TIMEntry> tims = new List<TIMEntry>();
+                            for (int k = 0; k < timPositions.Count; k++)
+                            {
+                                uint timPos = timPositions[k];
+
+                                string graphicFilename = new FileInfo(file).Name + "." + k + ".png";
+                                string graphicFilenameToInsert = outfilenames.Where((string x) => x.Contains(graphicFilename)).FirstOrDefault();
+                                if (!string.IsNullOrEmpty(graphicFilenameToInsert))
+                                {
+                                    Console.WriteLine("Inserting image " + graphicFilenameToInsert + "...");
+                                    br.BaseStream.Seek(timPos, SeekOrigin.Begin);
+                                    try
+                                    {
+                                        TIM tim = new TIM(br, true);
+                                        tim.ImportImage(graphicFilenameToInsert);
+                                        tims.Add(new TIMEntry
+                                        {
+                                            index = k,
+                                            position = timPos,
+                                            aTim = tim,
+                                        });
+                                    }
+                                    catch
+                                    {
+                                    }
+                                }
+                            }
+                            br.Close();
+
+                            BinaryWriter bw = new BinaryWriter(File.OpenWrite(file));
+                            for (int l = 0; l < tims.Count; l++)
+                            {
+                                TIMEntry timEntry = tims[l];
+                                bw.BaseStream.Seek(timEntry.aTim.GetPixelPos(), SeekOrigin.Begin);
+                                bw.Write(timEntry.aTim.GetPixelData());
+                            }
+                            bw.Close();
+                        }
+                    }
                 }
-                else
-                {
-                    TIM tim = new TIM(opts.Infilename, opts.BPP, (ushort)g.Width, (ushort)g.Height, opts.PixelPos, opts.PalettePos);
-                    tim.ImportImage(opts.Outfilename);
-
-                    int pixelPos = opts.PixelPos.StartsWith("0x") ? Int32.Parse(opts.PixelPos.Substring(2), NumberStyles.HexNumber) : Int32.Parse(opts.PixelPos);
-
-                    BinaryWriter infile = new BinaryWriter(File.OpenWrite(opts.Infilename));
-                    infile.BaseStream.Seek(pixelPos, SeekOrigin.Begin);
-                    infile.Write(tim.GetPixelData());
-                    infile.Close();
-                }
-                
-                
-
             }
         }
 
