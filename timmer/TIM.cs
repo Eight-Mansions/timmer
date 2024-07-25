@@ -418,7 +418,6 @@ namespace timmer
             {
                 for (int j = 0; j < prect.w; j += 2)
                 {
-                    _ = 238;
                     byte b = pdata[num];
                     b = (byte)((b & (num2 << 4)) | (b & num2));
                     b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i))) & 0xFu);
@@ -539,7 +538,7 @@ namespace timmer
 
             if (images.Length == 1)
             {
-                images[0].Save(filename, ImageFormat.Png);
+                images[0].Save(filename.Replace(".png", "_" + 0.ToString("D4") + ".png"), ImageFormat.Png);
             }
             else
             {

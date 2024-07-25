@@ -134,7 +134,7 @@ namespace timmer
                             try
                             {
                                 TIM tim = new TIM(br, false);
-                                string filename = item + "." + i + ".png";
+                                string filename = item + "." + i.ToString("D4") + ".png";
                                 tim.ExportPNG(filename);
                             }
                             catch
