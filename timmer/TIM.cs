@@ -18,6 +18,12 @@ namespace timmer
         public ushort icolor;  // Color from image
         public int ccolor;  // CLUT index
     }
+    
+    public class CLUT
+    {
+        public List<Color> colors = new List<Color>();
+        public List<int[]> numbers = new List<int[]>();
+    }
 
     public class TIM
     {
@@ -34,6 +40,7 @@ namespace timmer
         uint ppos;
         uint mask;
         bool useSTP;
+        List<CLUT> cluts = new List<CLUT>();
 
 
 
@@ -187,8 +194,10 @@ namespace timmer
                 };
 
                 ccount = 0;
-                // CLUT entires are 16 bits (2 bytes) each
+                // CLUT entries are 16 bits (2 bytes) each
                 ccount = ((mode & 7) == 1) ? ((csize - 12) / 2) / 256 : ((csize - 12) / 2) / 16;
+                // Number of colors in the CLUT
+                int numColors = ((mode & 7) == 1) ? 256 : 16;
 
                 if ((mode & 7) == 1 && (((csize - 12) / 2) % 256 != 0))
                 {
@@ -205,6 +214,23 @@ namespace timmer
                 {
                     cdata[i] = aTim.ReadUInt16();
                     acolors.Add(ColorToArray(RGBAToColor(cdata[i])));
+                }
+
+                cluts = new List<CLUT>();
+
+
+                CLUT clut = new CLUT();
+                for (int i = 0; i < cdata.Length; i++)
+                {
+                    clut.colors.Add(RGBAToColor(cdata[i]));
+                    clut.numbers.Add(ColorToArray(RGBAToColor(cdata[i])));
+
+
+                    if (clut.colors.Count == numColors)
+                    {
+                        cluts.Add(clut);
+                        clut = new CLUT();
+                    }
                 }
             }
 
@@ -272,7 +298,7 @@ namespace timmer
         }
 
         // Thanks Hilltop for helping me with code!
-        int GetClosestColor(int[] targetColor)
+        int GetClosestColor(int[] targetColor, int clutIdx)
         {
             for (int i = 0; i < ccolors.Count; i++)
             {
@@ -282,14 +308,14 @@ namespace timmer
                 }
             }
 
-            int closestColorIdx = 0;
+            int closestColorIdx = cluts[clutIdx].numbers.Count - 1;
             if (targetColor[3] != 0)
             {
-                double minDistance = GetRGBDistance(acolors[0], targetColor);
+                double minDistance = GetRGBDistance(cluts[clutIdx].numbers[cluts[clutIdx].numbers.Count - 1], targetColor);
 
-                for (int i = 0; i < acolors.Count; i++)
+                for (int i = 0; i < cluts[clutIdx].numbers.Count; i++)
                 {
-                    double distance = GetRGBDistance(acolors[i], targetColor);
+                    double distance = GetRGBDistance(cluts[clutIdx].numbers[i], targetColor);
                     if (distance < minDistance)
                     {
                         minDistance = distance;
@@ -388,7 +414,7 @@ namespace timmer
         public Bitmap[] Export4Bpp()
         {
             List<Bitmap> images = new List<Bitmap>();
-            for (int i = 0; i < ccount; i++)
+            for (int i = 0; i < cluts.Count; i++)
             {
                 Bitmap image = new Bitmap(prect.w, prect.h);
                 int pidx = 0;
@@ -398,11 +424,11 @@ namespace timmer
                     for (int x = 0; x < prect.w; x += 2)
                     {
                         pixel = pdata[pidx++];
-                        ushort c = cdata[(i * 16) + (pixel & 0x0F)];
-                        image.SetPixel(x, y, RGBAToColor(c));
+                        //ushort c = //cdata[(i * 16) + (pixel & 0x0F)];
+                        image.SetPixel(x, y, cluts[i].colors[pixel & 0x0F]);
 
-                        c = cdata[(i * 16) + (pixel >> 4)];
-                        image.SetPixel(x + 1, y, RGBAToColor(c));
+                        //c = cdata[(i * 16) + (pixel >> 4)];
+                        image.SetPixel(x + 1, y, cluts[i].colors[pixel >> 4]);
                     }
                 }
                 images.Add(image);
@@ -410,7 +436,7 @@ namespace timmer
             return images.ToArray();
         }
 
-        public void Import4Bpp(Bitmap image)
+        public void Import4Bpp(Bitmap image, int clutIdx)
         {
             int num = 0;
             uint num2 = mask;
@@ -420,8 +446,8 @@ namespace timmer
                 {
                     byte b = pdata[num];
                     b = (byte)((b & (num2 << 4)) | (b & num2));
-                    b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i))) & 0xFu);
-                    b |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(j + 1, i))) & 0xF) << 4);
+                    b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i)), clutIdx) & 0xF);
+                    b |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(j + 1, i)), clutIdx) & 0xF) << 4);
                     pdata[num++] = b;
                 }
             }
@@ -430,7 +456,7 @@ namespace timmer
         public Bitmap[] Export8Bpp()
         {
             List<Bitmap> images = new List<Bitmap>();
-            for (int i = 0; i < ccount; i++)
+            for (int i = 0; i < cluts.Count; i++)
             {
                 Bitmap image = new Bitmap(prect.w, prect.h);
                 int pidx = 0;
@@ -439,8 +465,8 @@ namespace timmer
                     for (int x = 0; x < prect.w; x++)
                     {
                         byte pixel = pdata[pidx++];
-                        ushort c = cdata[(i * 256) + pixel];
-                        image.SetPixel(x, y, RGBAToColor(c));
+                        //ushort c = cdata[(i * 256) + pixel];
+                        image.SetPixel(x, y, cluts[i].colors[pixel]);
                     }
                 }
                 images.Add(image);
@@ -448,15 +474,22 @@ namespace timmer
             return images.ToArray();
         }
 
-        public void Import8Bpp(Bitmap image)
+        public void Import8Bpp(Bitmap image, int clutIdx)
         {
+            Bitmap toCompareTo = Export8Bpp()[clutIdx];
+
             int pidx = 0;
             for (int y = 0; y < prect.h; y++)
             {
                 for (int x = 0; x < prect.w; x++)
                 {
-
-                    pdata[pidx++] = (byte)GetClosestColor(ColorToArray(image.GetPixel(x, y)));
+                    Color c1 = toCompareTo.GetPixel(x, y);
+                    Color c2 = image.GetPixel(x, y);
+                    if (!(c1.R == c2.R && c1.G == c2.G && c1.B == c2.B))
+                    {
+                        pdata[pidx] = (byte)GetClosestColor(ColorToArray(c2), clutIdx);
+                    }
+                    pidx++;
                 }
             }
         }
@@ -553,11 +586,13 @@ namespace timmer
         {
             if ((mode & 7) == 0)        // 4 bpp
             {
-                Import4Bpp(new Bitmap(filename));
+                int clutIdx = GetCLUTIndex(filename);
+                Import4Bpp(new Bitmap(filename), clutIdx);
             }
             else if ((mode & 7) == 1)   // 8 bpp
             {
-                Import8Bpp(new Bitmap(filename));
+                int clutIdx = GetCLUTIndex(filename);
+                Import8Bpp(new Bitmap(filename), clutIdx);
             }
             else if ((mode & 7) == 2)   // 16 bpp
             {
@@ -571,6 +606,17 @@ namespace timmer
             {
                 throw new Exception("Mixed not implmented!");
             }
+        }
+
+        public int GetCLUTIndex(string filename)
+        {
+            int start = filename.LastIndexOf("_") + 1;
+            int end = filename.LastIndexOf(".");
+
+            int clutIdx = Int32.Parse(filename.Substring(start, end - start));
+
+            return clutIdx;
+
         }
 
         public void UseSTP(bool useSTP)
