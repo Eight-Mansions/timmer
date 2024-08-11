@@ -438,16 +438,47 @@ namespace timmer
 
         public void Import4Bpp(Bitmap image, int clutIdx)
         {
+            //int num = 0;
+            //uint num2 = mask;
+            //for (int i = 0; i < prect.h; i++)
+            //{
+            //    for (int j = 0; j < prect.w; j += 2)
+            //    {
+            //        byte b = pdata[num];
+            //        //b = (byte)((b & (num2 << 4)) | (b & num2));
+            //        b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i)), clutIdx) & 0xF);
+            //        b |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(j + 1, i)), clutIdx) & 0xF) << 4);
+            //        pdata[num++] = b;
+            //    }
+            //}
+
+            Bitmap toCompareTo = Export4Bpp()[clutIdx];
+
             int num = 0;
             uint num2 = mask;
-            for (int i = 0; i < prect.h; i++)
+            for (int y = 0; y < prect.h; y++)
             {
-                for (int j = 0; j < prect.w; j += 2)
+                for (int x = 0; x < prect.w; x += 2)
                 {
                     byte b = pdata[num];
-                    b = (byte)((b & (num2 << 4)) | (b & num2));
-                    b |= (byte)((uint)GetClosestColor(ColorToArray(image.GetPixel(j, i)), clutIdx) & 0xF);
-                    b |= (byte)((GetClosestColor(ColorToArray(image.GetPixel(j + 1, i)), clutIdx) & 0xF) << 4);
+
+                    Color c1 = toCompareTo.GetPixel(x, y);
+                    Color c2 = image.GetPixel(x, y);
+
+                    if (!(c1.R == c2.R && c1.G == c2.G && c1.B == c2.B && c1.A == c2.A))
+                    {
+                        b = (byte)(b & 0xF0);
+                        b |= (byte)((uint)GetClosestColor(ColorToArray(c2), clutIdx) & 0x0F);
+                    }
+
+                    Color c3 = toCompareTo.GetPixel(x + 1, y);
+                    Color c4 = image.GetPixel(x + 1, y);
+                    if (!(c3.R == c4.R && c3.G == c4.G && c3.B == c4.B && c3.A == c4.A))
+                    {
+                        b = (byte)(b & 0x0F);
+                        b |= (byte)((GetClosestColor(ColorToArray(c4), clutIdx) & 0x0F) << 4);
+                    }                       
+                    
                     pdata[num++] = b;
                 }
             }
@@ -483,9 +514,13 @@ namespace timmer
             {
                 for (int x = 0; x < prect.w; x++)
                 {
+                    if (x == 364 && y == 21)
+                    {
+                        int boopme = 0;
+                    }
                     Color c1 = toCompareTo.GetPixel(x, y);
                     Color c2 = image.GetPixel(x, y);
-                    if (!(c1.R == c2.R && c1.G == c2.G && c1.B == c2.B))
+                    if (!(c1.R == c2.R && c1.G == c2.G && c1.B == c2.B && c1.A == c2.A))
                     {
                         pdata[pidx] = (byte)GetClosestColor(ColorToArray(c2), clutIdx);
                     }
